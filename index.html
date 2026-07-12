@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ionic Formula Jigsaw Puzzle</title>
+    <style>
+        :root {
+            --bg: #f0f0f0;
+            --sidebar-bg: #ffffff;
+            --accent: #2c3e50;
+        }
+        body {
+            margin: 0;
+            font-family: 'Times New Roman', serif;
+            background-color: var(--bg);
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 18%; /* Changed from fixed px to relative % */
+            min-width: 160px;
+            max-width: 250px;
+            background: var(--sidebar-bg);
+            border-right: 2px solid #ccc;
+            overflow-y: auto;
+            padding: 1vh 0.5%;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+        .sidebar-inner {
+            display: flex;
+            gap: 4px;
+            width: 100%;
+            justify-content: center;
+        }
+        .sidebar-column {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1;
+            align-items: center;
+        }
+        .right-sidebar {
+            border-right: none;
+            border-left: 2px solid #ccc;
+        }
+        #workspace {
+            flex-grow: 1;
+            position: relative;
+            background-color: #fff;
+            margin: 1.5vh 1%;
+            border-radius: 12px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+        .workspace-hint {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ddd;
+            font-size: 3vw; /* Responsive font size */
+            pointer-events: none;
+            text-align: center;
+            width: 80%;
+        }
+        .ion-piece {
+            position: relative;
+            cursor: grab;
+            filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.15));
+            user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+        .ion-piece:active { cursor: grabbing; }
+        .workspace-piece {
+            position: absolute;
+            z-index: 5;
+            filter: drop-shadow(2px 2px 3px rgba(0,0,0,0.2));
+        }
+        .ion-label {
+            position: absolute;
+            text-align: center;
+            color: white;
+            font-weight: bold;
+            pointer-events: none;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+        }
+        .sup, .sub {
+            font-size: 0.65em;
+            line-height: 0;
+            position: relative;
+        }
+        .sup {
+            vertical-align: baseline;
+            top: -0.45em;
+        }
+        .sub {
+            vertical-align: baseline;
+            bottom: -0.2em;
+        }
+        
+        .btn-clear {
+            position: absolute;
+            top: 2vh;
+            right: 2%;
+            padding: 1vh 1.5vw;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            z-index: 20;
+            font-size: 0.9rem;
+        }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 2px; }
+
+        /* Ensure SVGs inside pieces scale properly */
+        svg {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+
+<div id="cations-list" class="sidebar">
+    <div class="sidebar-inner">
+        <div id="cations-col-1" class="sidebar-column"></div>
+        <div id="cations-col-2" class="sidebar-column"></div>
+    </div>
+</div>
+
+<div id="workspace">
+    <div class="workspace-hint">Drag ions here to build compounds</div>
+    <button class="btn-clear" onclick="clearWorkspace()">Clear All</button>
+</div>
+
+<div id="anions-list" class="sidebar right-sidebar">
+    <div class="sidebar-inner">
+        <div id="anions-col-1" class="sidebar-column"></div>
+        <div id="anions-col-2" class="sidebar-column"></div>
+    </div>
+</div>
+
+<script>
+const ions = {
+    cations: [
+        {id: 'H^+', c: 1, col: '#FF4136'}, {id: 'Li^+', c: 1, col: '#FF851B'}, 
+        {id: 'Na^+', c: 1, col: '#FFDC00'}, {id: 'K^+', c: 1, col: '#F012BE'},
+        {id: 'Ag^+', c: 1, col: '#AAAAAA'}, {id: 'NH_4^+', c: 1, col: '#2ECC40'},
+        {id: 'Mg^2+', c: 2, col: '#39CCCC'}, {id: 'Ca^2+', c: 2, col: '#FF851B'},
+        {id: 'Fe^2+', c: 2, col: '#0074D9'}, {id: 'Cu^2+', c: 2, col: '#7FDBFF'},
+        {id: 'Zn^2+', c: 2, col: '#B10DC9'}, {id: 'Fe^3+', c: 3, col: '#85144b'},
+        {id: 'Al^3+', c: 3, col: '#01FF70'}
+    ],
+    anions: [
+        {id: 'F^-', c: 1, col: '#2ECC40'}, {id: 'Cl^-', c: 1, col: '#3D9970'},
+        {id: 'Br^-', c: 1, col: '#85144b'}, {id: 'I^-', c: 1, col: '#B10DC9'},
+        {id: 'OH^-', c: 1, col: '#7FDBFF'}, {id: 'NO_3^-', c: 1, col: '#0074D9'}, 
+        {id: 'O^2-', c: 2, col: '#FF4136'}, {id: 'S^2-', c: 2, col: '#FFDC00'}, 
+        {id: 'CO_3^2-', c: 2, col: '#39CCCC'}, {id: 'SO_4^2-', c: 2, col: '#AAAAAA'}, 
+        {id: 'N^3-', c: 3, col: '#F012BE'}
+    ]
+};
+
+// Base constants for internal logic, but we treat them as relative units in practice
+const UNIT_H = 40; 
+const PIECE_W = 100;
+const TAB_R = 12; 
+const SIDEBAR_SCALE = 0.85;
+const SNAP_OVERLAP = 0; 
+
+let activeDragData = null;
+let workspaceIons = [];
+let workspaceWidth, workspaceHeight;
+
+function createPieceSVG(id, charge, type, color, isSidebar = false) {
+    const scale = isSidebar ? SIDEBAR_SCALE : 1;
+    const height = (charge * UNIT_H) * scale;
+    const width = PIECE_W * scale;
+    const tabR = TAB_R * scale;
+    const unitH = UNIT_H * scale;
+
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    
+    const svgWidth = type === 'a' ? width + tabR : width;
+    svg.setAttribute("viewBox", `0 0 ${svgWidth} ${height}`);
+    svg.style.width = `${svgWidth}px`;
+    svg.style.height = `${height}px`;
+    
+    const path = document.createElementNS(svgNS, "path");
+    path.setAttribute("fill", color);
+    
+    let d = "";
+    if (type === 'c') { 
+        d = `M 0 5 Q 0 0 5 0 H ${width}`;
+        for (let i = 0; i < charge; i++) {
+            const y = i * unitH + unitH/2;
+            d += ` V ${y - tabR} A ${tabR} ${tabR} 0 0 0 ${width} ${y + tabR}`;
+        }
+        d += ` V ${height-5} Q ${width} ${height} ${width-5} ${height} H 5 Q 0 ${height} 0 ${height-5} Z`;
+    } else { 
+        const startX = tabR;
+        const endX = width + tabR;
+        d = `M ${endX} 5 Q ${endX} 0 ${endX - 5} 0 H ${startX}`;
+        for (let i = 0; i < charge; i++) {
+            const y = i * unitH + unitH/2;
+            d += ` V ${y - tabR} A ${tabR} ${tabR} 0 0 0 ${startX} ${y + tabR}`;
+        }
+        d += ` V ${height-5} Q ${startX} ${height} ${startX + 5} ${height} H ${endX - 5} Q ${endX} ${height} ${endX} ${height-5} Z`;
+    }
+    
+    path.setAttribute("d", d);
+    svg.appendChild(path);
+    return svg;
+}
+
+function init() {
+    const cCol1 = document.getElementById('cations-col-1');
+    const cCol2 = document.getElementById('cations-col-2');
+    const aCol1 = document.getElementById('anions-col-1');
+    const aCol2 = document.getElementById('anions-col-2');
+
+    ions.cations.forEach((ion, idx) => {
+        const target = (idx % 2 === 0) ? cCol1 : cCol2;
+        createSidebarItem(ion, 'c', target);
+    });
+
+    ions.anions.forEach((ion, idx) => {
+        const target = (idx % 2 === 0) ? aCol1 : aCol2;
+        createSidebarItem(ion, 'a', target);
+    });
+
+    const ws = document.getElementById('workspace');
+    updateWorkspaceBounds();
+    
+    ws.addEventListener('dragover', e => e.preventDefault());
+    ws.addEventListener('drop', handleDrop);
+    window.addEventListener('resize', () => {
+        updateWorkspaceBounds();
+    });
+}
+
+function updateWorkspaceBounds() {
+    const ws = document.getElementById('workspace');
+    workspaceWidth = ws.clientWidth;
+    workspaceHeight = ws.clientHeight;
+}
+
+function createSidebarItem(data, type, container) {
+    const scale = SIDEBAR_SCALE;
+    const div = document.createElement('div');
+    div.className = 'ion-piece';
+    
+    const pieceWidth = type === 'a' ? (PIECE_W + TAB_R) * scale : PIECE_W * scale;
+    div.style.width = `${pieceWidth}px`;
+    div.appendChild(createPieceSVG(data.id, data.c, type, data.col, true));
+    
+    const label = document.createElement('div');
+    label.className = 'ion-label';
+    label.style.width = `${PIECE_W * scale}px`;
+    label.style.height = `${(data.c * UNIT_H) * scale}px`;
+    label.style.fontSize = `${1.7 * scale}rem`; 
+    
+    label.style.left = type === 'a' ? `${TAB_R * scale}px` : '0px';
+    label.style.top = '0px';
+    
+    label.innerHTML = formatLabel(data.id);
+    div.appendChild(label);
+
+    div.draggable = true;
+    div.addEventListener('dragstart', () => { activeDragData = { ...data, type }; });
+    container.appendChild(div);
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    if (!activeDragData) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    // Calculate relative percentages for the drop position
+    const pxX = e.clientX - rect.left - (PIECE_W / 2);
+    const pxY = e.clientY - rect.top - (activeDragData.c * UNIT_H / 2);
+
+    addIonToWorkspace(activeDragData, pxX, pxY);
+    activeDragData = null;
+}
+
+function addIonToWorkspace(data, x, y) {
+    const div = document.createElement('div');
+    div.className = 'ion-piece workspace-piece';
+    
+    // Store positions as percentages of workspace for responsiveness
+    let pctX = (x / workspaceWidth) * 100;
+    let pctY = (y / workspaceHeight) * 100;
+    
+    div.style.left = `${pctX}%`;
+    div.style.top = `${pctY}%`;
+    
+    div.appendChild(createPieceSVG(data.id, data.c, data.type, data.col, false));
+    
+    const label = document.createElement('div');
+    label.className = 'ion-label';
+    label.style.width = `${PIECE_W}px`;
+    label.style.height = `${data.c * UNIT_H}px`;
+    label.style.fontSize = '1.77rem';
+    
+    label.style.left = data.type === 'a' ? `${TAB_R}px` : '0px';
+    label.style.top = '0px';
+    
+    label.innerHTML = formatLabel(data.id);
+    div.appendChild(label);
+
+    document.getElementById('workspace').appendChild(div);
+    const entry = { ...data, pctX, pctY, el: div };
+    workspaceIons.push(entry);
+
+    makeMovable(entry);
+    checkSnapping(entry);
+    updateSimulation();
+}
+
+function makeMovable(entry) {
+    let startMouseX, startMouseY, startPctX, startPctY;
+    
+    entry.el.onmousedown = (e) => {
+        if (e.button !== 0) return;
+        
+        startMouseX = e.clientX;
+        startMouseY = e.clientY;
+        startPctX = entry.pctX;
+        startPctY = entry.pctY;
+        
+        entry.el.style.zIndex = 1000;
+
+        document.onmousemove = (e) => {
+            const deltaX = e.clientX - startMouseX;
+            const deltaY = e.clientY - startMouseY;
+            
+            entry.pctX = startPctX + (deltaX / workspaceWidth) * 100;
+            entry.pctY = startPctY + (deltaY / workspaceHeight) * 100;
+            
+            entry.el.style.left = `${entry.pctX}%`;
+            entry.el.style.top = `${entry.pctY}%`;
+        };
+
+        document.onmouseup = () => {
+            document.onmousemove = null;
+            document.onmouseup = null;
+            entry.el.style.zIndex = 5;
+            checkSnapping(entry);
+            updateSimulation();
+        };
+    };
+}
+
+function checkSnapping(draggedPiece) {
+    // Thresholds converted to approximate percentages
+    const thresholdPctX = (40 / workspaceWidth) * 100;
+    const thresholdPctY = (30 / workspaceHeight) * 100;
+    
+    for (const other of workspaceIons) {
+        if (other === draggedPiece || other.type === draggedPiece.type) continue;
+
+        const cation = draggedPiece.type === 'c' ? draggedPiece : other;
+        const anion = draggedPiece.type === 'a' ? draggedPiece : other;
+
+        // Target: anion.pctX should be at cation.pctX + Width (in pct)
+        const pieceWPct = ( (PIECE_W - TAB_R - SNAP_OVERLAP) / workspaceWidth ) * 100;
+        const targetAnionPctX = cation.pctX + pieceWPct;
+        const xGap = Math.abs(anion.pctX - targetAnionPctX);
+
+        if (xGap < thresholdPctX) {
+            const unitHPct = (UNIT_H / workspaceHeight) * 100;
+            
+            for (let cOffset = 0; cOffset < cation.c; cOffset++) {
+                for (let aOffset = 0; aOffset < anion.c; aOffset++) {
+                    const cSocketPctY = cation.pctY + (cOffset * unitHPct);
+                    const aSocketPctY = anion.pctY + (aOffset * unitHPct);
+                    
+                    if (Math.abs(cSocketPctY - aSocketPctY) < thresholdPctY) {
+                        if (draggedPiece === anion) {
+                            draggedPiece.pctY = cation.pctY + (cOffset * unitHPct) - (aOffset * unitHPct);
+                            draggedPiece.pctX = targetAnionPctX;
+                        } else {
+                            draggedPiece.pctY = anion.pctY + (aOffset * unitHPct) - (cOffset * unitHPct);
+                            draggedPiece.pctX = anion.pctX - pieceWPct;
+                        }
+                        
+                        draggedPiece.el.style.top = `${draggedPiece.pctY}%`;
+                        draggedPiece.el.style.left = `${draggedPiece.pctX}%`;
+                        return; 
+                    }
+                }
+            }
+        }
+    }
+}
+
+function updateSimulation() {
+    const hint = document.querySelector('.workspace-hint');
+    if (hint) hint.style.display = workspaceIons.length > 0 ? 'none' : 'block';
+}
+
+function formatLabel(id) {
+    return id.replace(/(_|\^)([^^_]+)/g, (match, type, content) => {
+        const className = type === '^' ? 'sup' : 'sub';
+        return `<span class="${className}">${content}</span>`;
+    });
+}
+
+function clearWorkspace() {
+    workspaceIons.forEach(ion => ion.el.remove());
+    workspaceIons = [];
+    updateSimulation();
+}
+
+init();
+</script>
+</body>
+</html>
