@@ -18,9 +18,78 @@
             height: 100vh;
             width: 100vw;
             overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
         }
+        
         .sidebar {
-            width: 18%; /* Changed from fixed px to relative % */
+            width: 22%; 
+            min-width: 185px;
+            max-width: 280px;
+            background: var(--sidebar-bg);
+            border-right: 2px solid #ccc;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 1vh 4px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+            z-index: 10;
+            touch-action: pan-y;
+        }
+        .sidebar-inner {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-evenly;
+            gap: 4px;
+            width: 100%;
+        }
+        .sidebar-column {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 0 1 48%;
+            align-items: center;
+        }
+        .right-sidebar {
+            border-right: none;
+            border-left: 2px solid #ccc;
+        }
+        #workspace {
+            flex-grow: 1;
+            position: relative;
+            background-color: #fff;
+            margin: 1.5vh 1%;
+            border-radius: 12px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.05);
+            overflow: hidden;
+            touch-action: none;
+        }
+        .workspace-hint {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ddd;
+            font-size: 3vw;
+            pointer-events: none;
+            text-align: center;
+            width: 80%;
+        }
+        .ion-piece {
+            position: relative;
+            cursor: grab;
+            filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.15));
+            user-select: none;
+            -webkit-user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            touch-action: none;
+        }
+        
+        .sidebar {
+            width: 18%; 
             min-width: 160px;
             max-width: 250px;
             background: var(--sidebar-bg);
@@ -34,16 +103,15 @@
         }
         .sidebar-inner {
             display: flex;
-            gap: 4px;
+            gap: 2px;
             width: 100%;
             justify-content: center;
         }
         .sidebar-column {
             display: flex;
             flex-direction: column;
-            gap: 4px;
-            flex: 1;
-            align-items: center;
+            gap: 2px;
+            flex: 0 1 auto;
         }
         .right-sidebar {
             border-right: none;
@@ -63,7 +131,7 @@
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             color: #ddd;
-            font-size: 3vw; /* Responsive font size */
+            font-size: 3vw;
             pointer-events: none;
             text-align: center;
             width: 80%;
@@ -126,7 +194,6 @@
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 2px; }
 
-        /* Ensure SVGs inside pieces scale properly */
         svg {
             display: block;
             width: 100%;
@@ -176,11 +243,11 @@ const ions = {
     ]
 };
 
-// Base constants for internal logic, but we treat them as relative units in practice
-const UNIT_H = 40; 
-const PIECE_W = 100;
-const TAB_R = 12; 
-const SIDEBAR_SCALE = 0.85;
+// Increased dimensions for larger, clearer jigsaw pieces and touch targets
+const UNIT_H = 60; 
+const PIECE_W = 130;
+const TAB_R = 18; 
+const SIDEBAR_SCALE = 0.55; 
 const SNAP_OVERLAP = 0; 
 
 let activeDragData = null;
@@ -235,14 +302,15 @@ function init() {
     const aCol1 = document.getElementById('anions-col-1');
     const aCol2 = document.getElementById('anions-col-2');
 
+    // Distribute ions across 2 columns per sidebar
     ions.cations.forEach((ion, idx) => {
-        const target = (idx % 2 === 0) ? cCol1 : cCol2;
-        createSidebarItem(ion, 'c', target);
+        const targetCol = (idx % 2 === 0) ? cCol1 : cCol2;
+        createSidebarItem(ion, 'c', targetCol);
     });
 
     ions.anions.forEach((ion, idx) => {
-        const target = (idx % 2 === 0) ? aCol1 : aCol2;
-        createSidebarItem(ion, 'a', target);
+        const targetCol = (idx % 2 === 0) ? aCol1 : aCol2;
+        createSidebarItem(ion, 'a', targetCol);
     });
 
     const ws = document.getElementById('workspace');
@@ -274,7 +342,8 @@ function createSidebarItem(data, type, container) {
     label.className = 'ion-label';
     label.style.width = `${PIECE_W * scale}px`;
     label.style.height = `${(data.c * UNIT_H) * scale}px`;
-    label.style.fontSize = `${1.7 * scale}rem`; 
+    
+    label.style.fontSize = `${2.2 * scale}rem`; 
     
     label.style.left = type === 'a' ? `${TAB_R * scale}px` : '0px';
     label.style.top = '0px';
@@ -282,9 +351,79 @@ function createSidebarItem(data, type, container) {
     label.innerHTML = formatLabel(data.id);
     div.appendChild(label);
 
+    // Desktop HTML5 Drag Support
     div.draggable = true;
     div.addEventListener('dragstart', () => { activeDragData = { ...data, type }; });
+
+    // Touch Support for iPad
+    div.addEventListener('touchstart', (e) => handleSidebarTouchStart(e, data, type), { passive: false });
+
     container.appendChild(div);
+}
+
+function handleSidebarTouchStart(e, data, type) {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+
+    // Create a temporary floating drag element for iPad
+    const dragGhost = document.createElement('div');
+    dragGhost.className = 'ion-piece';
+    dragGhost.style.position = 'fixed';
+    dragGhost.style.pointerEvents = 'none';
+    dragGhost.style.zIndex = '9999';
+    dragGhost.style.opacity = '0.85';
+    dragGhost.appendChild(createPieceSVG(data.id, data.c, type, data.col, false));
+
+    const label = document.createElement('div');
+    label.className = 'ion-label';
+    label.style.width = `${PIECE_W}px`;
+    label.style.height = `${data.c * UNIT_H}px`;
+    label.style.fontSize = '2.2rem';
+    label.style.left = type === 'a' ? `${TAB_R}px` : '0px';
+    label.style.top = '0px';
+    label.innerHTML = formatLabel(data.id);
+    dragGhost.appendChild(label);
+
+    document.body.appendChild(dragGhost);
+
+    function positionGhost(touchX, touchY) {
+        dragGhost.style.left = `${touchX - (PIECE_W / 2)}px`;
+        dragGhost.style.top = `${touchY - (data.c * UNIT_H / 2)}px`;
+    }
+
+    positionGhost(touch.clientX, touch.clientY);
+
+    function onTouchMove(eMove) {
+        if (eMove.touches.length !== 1) return;
+        eMove.preventDefault(); // Prevent iPad web page pull/scroll
+        const t = eMove.touches[0];
+        positionGhost(t.clientX, t.clientY);
+    }
+
+    function onTouchEnd(eEnd) {
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onTouchEnd);
+        dragGhost.remove();
+
+        const changedTouch = eEnd.changedTouches[0];
+        const ws = document.getElementById('workspace');
+        const rect = ws.getBoundingClientRect();
+
+        // Check if dropped inside workspace bounds
+        if (
+            changedTouch.clientX >= rect.left &&
+            changedTouch.clientX <= rect.right &&
+            changedTouch.clientY >= rect.top &&
+            changedTouch.clientY <= rect.bottom
+        ) {
+            const x = changedTouch.clientX - rect.left - (PIECE_W / 2);
+            const y = changedTouch.clientY - rect.top - (data.c * UNIT_H / 2);
+            addIonToWorkspace({ ...data, type }, x, y);
+        }
+    }
+
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', onTouchEnd);
 }
 
 function handleDrop(e) {
@@ -292,11 +431,10 @@ function handleDrop(e) {
     if (!activeDragData) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
-    // Calculate relative percentages for the drop position
-    const pxX = e.clientX - rect.left - (PIECE_W / 2);
-    const pxY = e.clientY - rect.top - (activeDragData.c * UNIT_H / 2);
+    const x = e.clientX - rect.left - (PIECE_W / 2);
+    const y = e.clientY - rect.top - (activeDragData.c * UNIT_H / 2);
 
-    addIonToWorkspace(activeDragData, pxX, pxY);
+    addIonToWorkspace(activeDragData, x, y);
     activeDragData = null;
 }
 
@@ -304,7 +442,6 @@ function addIonToWorkspace(data, x, y) {
     const div = document.createElement('div');
     div.className = 'ion-piece workspace-piece';
     
-    // Store positions as percentages of workspace for responsiveness
     let pctX = (x / workspaceWidth) * 100;
     let pctY = (y / workspaceHeight) * 100;
     
@@ -317,7 +454,8 @@ function addIonToWorkspace(data, x, y) {
     label.className = 'ion-label';
     label.style.width = `${PIECE_W}px`;
     label.style.height = `${data.c * UNIT_H}px`;
-    label.style.fontSize = '1.77rem';
+    
+    label.style.fontSize = '2.2rem';
     
     label.style.left = data.type === 'a' ? `${TAB_R}px` : '0px';
     label.style.top = '0px';
@@ -335,21 +473,22 @@ function addIonToWorkspace(data, x, y) {
 }
 
 function makeMovable(entry) {
-    let startMouseX, startMouseY, startPctX, startPctY;
+    let startX, startY, startPctX, startPctY;
     
+    // Mouse dragging (Desktop)
     entry.el.onmousedown = (e) => {
         if (e.button !== 0) return;
         
-        startMouseX = e.clientX;
-        startMouseY = e.clientY;
+        startX = e.clientX;
+        startY = e.clientY;
         startPctX = entry.pctX;
         startPctY = entry.pctY;
         
         entry.el.style.zIndex = 1000;
 
         document.onmousemove = (e) => {
-            const deltaX = e.clientX - startMouseX;
-            const deltaY = e.clientY - startMouseY;
+            const deltaX = e.clientX - startX;
+            const deltaY = e.clientY - startY;
             
             entry.pctX = startPctX + (deltaX / workspaceWidth) * 100;
             entry.pctY = startPctY + (deltaY / workspaceHeight) * 100;
@@ -366,12 +505,49 @@ function makeMovable(entry) {
             updateSimulation();
         };
     };
+
+    // Touch dragging (iPad / Mobile)
+    entry.el.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1) return;
+        const touch = e.touches[0];
+
+        startX = touch.clientX;
+        startY = touch.clientY;
+        startPctX = entry.pctX;
+        startPctY = entry.pctY;
+        
+        entry.el.style.zIndex = 1000;
+
+        function onTouchMove(eMove) {
+            if (eMove.touches.length !== 1) return;
+            eMove.preventDefault(); // Prevent iPad scrolling while moving piece
+            const t = eMove.touches[0];
+            const deltaX = t.clientX - startX;
+            const deltaY = t.clientY - startY;
+
+            entry.pctX = startPctX + (deltaX / workspaceWidth) * 100;
+            entry.pctY = startPctY + (deltaY / workspaceHeight) * 100;
+
+            entry.el.style.left = `${entry.pctX}%`;
+            entry.el.style.top = `${entry.pctY}%`;
+        }
+
+        function onTouchEnd() {
+            document.removeEventListener('touchmove', onTouchMove);
+            document.removeEventListener('touchend', onTouchEnd);
+            entry.el.style.zIndex = 5;
+            checkSnapping(entry);
+            updateSimulation();
+        }
+
+        document.addEventListener('touchmove', onTouchMove, { passive: false });
+        document.addEventListener('touchend', onTouchEnd);
+    }, { passive: false });
 }
 
 function checkSnapping(draggedPiece) {
-    // Thresholds converted to approximate percentages
-    const thresholdPctX = (40 / workspaceWidth) * 100;
-    const thresholdPctY = (30 / workspaceHeight) * 100;
+    const thresholdX = (60 / workspaceWidth) * 100;
+    const thresholdPctY = (45 / workspaceHeight) * 100;
     
     for (const other of workspaceIons) {
         if (other === draggedPiece || other.type === draggedPiece.type) continue;
@@ -379,12 +555,11 @@ function checkSnapping(draggedPiece) {
         const cation = draggedPiece.type === 'c' ? draggedPiece : other;
         const anion = draggedPiece.type === 'a' ? draggedPiece : other;
 
-        // Target: anion.pctX should be at cation.pctX + Width (in pct)
         const pieceWPct = ( (PIECE_W - TAB_R - SNAP_OVERLAP) / workspaceWidth ) * 100;
-        const targetAnionPctX = cation.pctX + pieceWPct;
-        const xGap = Math.abs(anion.pctX - targetAnionPctX);
+        const targetAnionX = cation.pctX + pieceWPct;
+        const xGap = Math.abs(anion.pctX - targetAnionX);
 
-        if (xGap < thresholdPctX) {
+        if (xGap < thresholdX) {
             const unitHPct = (UNIT_H / workspaceHeight) * 100;
             
             for (let cOffset = 0; cOffset < cation.c; cOffset++) {
@@ -395,7 +570,7 @@ function checkSnapping(draggedPiece) {
                     if (Math.abs(cSocketPctY - aSocketPctY) < thresholdPctY) {
                         if (draggedPiece === anion) {
                             draggedPiece.pctY = cation.pctY + (cOffset * unitHPct) - (aOffset * unitHPct);
-                            draggedPiece.pctX = targetAnionPctX;
+                            draggedPiece.pctX = targetAnionX;
                         } else {
                             draggedPiece.pctY = anion.pctY + (aOffset * unitHPct) - (cOffset * unitHPct);
                             draggedPiece.pctX = anion.pctX - pieceWPct;
